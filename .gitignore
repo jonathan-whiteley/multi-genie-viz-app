@@ -141,3 +141,19 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Build outputs
+dist/
+.vite/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Databricks Apps build artifacts
+.databricks/
+
+# IDE
+.vscode/
+.idea/
