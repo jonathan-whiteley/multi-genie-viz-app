@@ -1,23 +1,15 @@
 command: ["npm", "run", "start"]
+runtime: nodejs20
 
 env:
   - name: NODE_ENV
     value: production
   - name: PORT
     value: "8000"
-  - name: DATABRICKS_HOST
-    valueFrom: databricks_host
   - name: MAS_ENDPOINT_NAME
-    valueFrom: mas_endpoint_name
+    valueFrom: mas-endpoint
   - name: GENIE_SPACES_JSON
-    valueFrom: genie_spaces_json
-  - name: LAKEBASE_HOST
-    valueFrom: lakebase_host
-  - name: LAKEBASE_DATABASE
-    valueFrom: lakebase_database
-  - name: LAKEBASE_USER
-    valueFrom: lakebase_user
-  - name: LAKEBASE_PASSWORD
-    valueFrom: lakebase_password
-  - name: GENIE_FEEDBACK_PATH
-    valueFrom: genie_feedback_path
+    value: '[{"space_id":"01f0aae3f2a812ceb9f489fa0317532a","label":"LCE Sales TXN","tags":["sales","revenue"],"tool_name":"lce-sales-txn-genie","suggested_questions":["What were Q1 revenues?","Show top SKUs this month"]}]'
+  # DATABRICKS_HOST is auto-injected by the Databricks Apps platform.
+  # PGHOST, PGDATABASE, PGUSER, PGPASSWORD, PGSSLMODE are auto-injected
+  # by the 'database' resource binding -- no explicit valueFrom needed.

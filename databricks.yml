@@ -5,9 +5,33 @@ variables:
   mas_endpoint_name:
     description: "MAS serving endpoint name"
     default: "mas-cfcbc058-endpoint"
+  database_instance_name:
+    description: "Lakebase Postgres instance name"
+    default: "jdub-lakebase-db-instance"
+  database_name:
+    description: "Postgres database name within the instance"
+    default: "multi_genie_app"
   genie_spaces_json:
-    description: "JSON array of Genie space configs"
-    default: "[]"
+    description: "JSON array of Genie space configs (tool_name -> space_id mapping, suggested questions, etc.)"
+    default: '[{"space_id":"01f0aae3f2a812ceb9f489fa0317532a","label":"LCE Sales TXN","tags":["sales","revenue"],"tool_name":"lce-sales-txn-genie","suggested_questions":["What were Q1 revenues?","Show top SKUs this month"]}]'
+
+sync:
+  # Exclude monorepo workspaces that cause npm install to crash.
+  # server/dist is gitignored but must be imported separately via workspace import-dir.
+  # package.json is excluded here; deploy-package.json is uploaded as package.json manually.
+  exclude:
+    - packages/
+    - client/
+    - server/src
+    - server/tsconfig.json
+    - tsconfig.json
+    - package.json
+    - package-lock.json
+    - deploy-package.json
+    - scripts/
+    - .github/
+    - "*.md"
+    - LICENSE
 
 resources:
   apps:
@@ -15,11 +39,20 @@ resources:
       name: multi-genie-viz-app
       description: "Multi-Genie chat with per-space feedback propagation"
       source_code_path: .
+      user_api_scopes:
+        - serving.serving-endpoints
       resources:
         - name: mas-endpoint
+          description: "MAS serving endpoint"
           serving_endpoint:
             name: ${var.mas_endpoint_name}
             permission: CAN_QUERY
+        - name: database
+          description: "Lakebase Postgres database for chat history and feedback"
+          database:
+            database_name: ${var.database_name}
+            instance_name: ${var.database_instance_name}
+            permission: CAN_CONNECT_AND_CREATE
 
 targets:
   dev:
