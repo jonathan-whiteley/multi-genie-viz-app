@@ -13,3 +13,17 @@ scripts/
 mas-stream-sample*
 FINDINGS.md
 mas-endpoint-meta.json
+packages/
+client/src
+client/public
+client/index.html
+client/vite.config.ts
+client/tsconfig.json
+client/vite-env.d.ts
+server/src
+server/tsconfig.json
+README.md
+LICENSE
+databricks.yml
+.databricks
+deploy-package.json
