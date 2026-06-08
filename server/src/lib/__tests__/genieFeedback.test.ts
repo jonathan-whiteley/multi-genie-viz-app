@@ -50,8 +50,10 @@ describe('submitGenieFeedback', () => {
       rating: 'up', fetchImpl: fetchMock,
     });
     expect(res.ok).toBe(false);
-    expect(res.error).toContain('404');
-    expect(res.error).toContain('not found');
+    if (!res.ok) {
+      expect(res.error).toContain('404');
+      expect(res.error).toContain('not found');
+    }
   });
 
   it('respects pathOverride template', async () => {
