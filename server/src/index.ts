@@ -23,7 +23,7 @@ app.use(feedbackRouter);
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.resolve(__dirname, '../../client/dist');
   app.use(express.static(clientDist));
-  app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+  app.use((_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
 }
 
 const port = Number(process.env.PORT ?? 8000);
