@@ -1,0 +1,33 @@
+bundle:
+  name: multi-genie-viz-app
+
+variables:
+  mas_endpoint_name:
+    description: "MAS serving endpoint name"
+    default: "mas-cfcbc058-endpoint"
+  genie_spaces_json:
+    description: "JSON array of Genie space configs"
+    default: "[]"
+
+resources:
+  apps:
+    multi_genie_viz_app:
+      name: multi-genie-viz-app
+      description: "Multi-Genie chat with per-space feedback propagation"
+      source_code_path: .
+      resources:
+        - name: mas-endpoint
+          serving_endpoint:
+            name: ${var.mas_endpoint_name}
+            permission: CAN_QUERY
+
+targets:
+  dev:
+    workspace:
+      host: https://fe-vm-jdub-vm-serverless.cloud.databricks.com
+    mode: development
+  prod:
+    workspace:
+      host: https://fe-vm-jdub-vm-serverless.cloud.databricks.com
+      root_path: /Workspace/Users/jonathan.whiteley@databricks.com/.bundle/${bundle.name}/${bundle.target}
+    mode: production
