@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@multi-genie/auth": "*",
     "@multi-genie/core": "*",
     "drizzle-orm": "^0.36.0",
     "postgres": "^3.4.0"

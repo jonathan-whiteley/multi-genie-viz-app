@@ -25,6 +25,58 @@ function parseOboHeaders(headers) {
   return { email, username, accessToken };
 }
 
+// packages/auth/src/databricks-token.ts
+var cachedToken = null;
+var REFRESH_MARGIN_MS = 6e4;
+function isServicePrincipalAuthAvailable() {
+  return !!(process.env.DATABRICKS_CLIENT_ID && process.env.DATABRICKS_CLIENT_SECRET && process.env.DATABRICKS_HOST);
+}
+async function getDatabricksToken() {
+  if (cachedToken && Date.now() < cachedToken.expiresAt - REFRESH_MARGIN_MS) {
+    return cachedToken.token;
+  }
+  const clientId = process.env.DATABRICKS_CLIENT_ID;
+  const clientSecret = process.env.DATABRICKS_CLIENT_SECRET;
+  const host = process.env.DATABRICKS_HOST;
+  if (!clientId || !clientSecret || !host) {
+    throw new Error(
+      "Missing DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET, or DATABRICKS_HOST for OAuth token acquisition"
+    );
+  }
+  const cleanHost = host.replace(/\/$/, "").replace(/^https?:\/\//, "");
+  const tokenUrl = `https://${cleanHost}/oidc/v1/token`;
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    scope: "all-apis"
+  });
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basicAuth}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: body.toString()
+  });
+  if (!res.ok) {
+    const text2 = await res.text().catch(() => "");
+    throw new Error(`OAuth token request failed: ${res.status} ${text2.slice(0, 300)}`);
+  }
+  const json = await res.json();
+  if (!json.access_token) {
+    throw new Error("OAuth response missing access_token");
+  }
+  const expiresInMs = (json.expires_in || 3600) * 1e3;
+  cachedToken = {
+    token: json.access_token,
+    expiresAt: Date.now() + expiresInMs
+  };
+  console.log(
+    `[OAuth] Token acquired, expires in ${json.expires_in}s, will refresh in ${Math.floor((expiresInMs - REFRESH_MARGIN_MS) / 1e3)}s`
+  );
+  return cachedToken.token;
+}
+
 // packages/db/src/schema.ts
 var schema_exports = {};
 __export(schema_exports, {
@@ -109,60 +161,83 @@ var feedback = appSchema.table(
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 var _db = null;
-function getDb() {
+var _client = null;
+async function resolvePassword() {
+  const direct = process.env.PGPASSWORD ?? process.env.LAKEBASE_PASSWORD;
+  if (direct) return direct;
+  if (isServicePrincipalAuthAvailable()) {
+    const token = await getDatabricksToken();
+    return token;
+  }
+  throw new Error(
+    "No PGPASSWORD/LAKEBASE_PASSWORD found and DATABRICKS_CLIENT_ID/SECRET not available for OAuth"
+  );
+}
+async function getDb() {
   if (_db) return _db;
   const host = process.env.PGHOST ?? process.env.LAKEBASE_HOST;
   const database = process.env.PGDATABASE ?? process.env.LAKEBASE_DATABASE;
   const user2 = process.env.PGUSER ?? process.env.LAKEBASE_USER;
-  const password = process.env.PGPASSWORD ?? process.env.LAKEBASE_PASSWORD;
-  if (!host || !database || !user2 || !password) {
-    throw new Error("Database env vars required: PGHOST/PGDATABASE/PGUSER/PGPASSWORD (or LAKEBASE_* for local dev)");
+  if (!host || !database || !user2) {
+    throw new Error(
+      "Database env vars required: PGHOST/PGDATABASE/PGUSER (or LAKEBASE_* for local dev)"
+    );
   }
-  const ssl = process.env.PGSSLMODE ?? process.env.LAKEBASE_SSL ?? "require";
-  const client = postgres({
+  const password = await resolvePassword();
+  const port2 = Number(process.env.PGPORT ?? "5432");
+  const sslmode = process.env.PGSSLMODE ?? process.env.LAKEBASE_SSL ?? "require";
+  _client = postgres({
     host,
     database,
     user: user2,
     password,
-    port: Number(process.env.PGPORT ?? 5432),
-    ssl,
+    port: port2,
+    ssl: sslmode,
     max: 10
   });
-  _db = drizzle(client, { schema: schema_exports });
+  _db = drizzle(_client, { schema: schema_exports });
+  console.log(`[DB] Connected to ${database} on ${host} (user: ${user2})`);
   return _db;
 }
 
 // packages/db/src/queries.ts
 import { eq, desc, and } from "drizzle-orm";
-var db = () => getDb();
 async function upsertUserByEmail(email) {
-  const existing = await db().select().from(user).where(eq(user.email, email)).limit(1);
+  const db = await getDb();
+  const existing = await db.select().from(user).where(eq(user.email, email)).limit(1);
   if (existing[0]) return existing[0];
-  const [created] = await db().insert(user).values({ email }).returning();
+  const [created] = await db.insert(user).values({ email }).returning();
   return created;
 }
 async function createChat(userId, title = null) {
-  const [created] = await db().insert(chat).values({ userId, title }).returning();
+  const db = await getDb();
+  const [created] = await db.insert(chat).values({ userId, title }).returning();
   return created;
 }
 async function listChats(userId) {
-  return db().select().from(chat).where(eq(chat.userId, userId)).orderBy(desc(chat.updatedAt));
+  const db = await getDb();
+  return db.select().from(chat).where(eq(chat.userId, userId)).orderBy(desc(chat.updatedAt));
 }
 async function getChat(chatId, userId) {
-  const rows = await db().select().from(chat).where(and(eq(chat.id, chatId), eq(chat.userId, userId))).limit(1);
+  const db = await getDb();
+  const rows = await db.select().from(chat).where(and(eq(chat.id, chatId), eq(chat.userId, userId))).limit(1);
   return rows[0] ?? null;
 }
 async function deleteChat(chatId, userId) {
-  await db().delete(chat).where(and(eq(chat.id, chatId), eq(chat.userId, userId)));
+  const db = await getDb();
+  await db.delete(chat).where(and(eq(chat.id, chatId), eq(chat.userId, userId)));
 }
 async function touchChat(chatId) {
-  await db().update(chat).set({ updatedAt: /* @__PURE__ */ new Date() }).where(eq(chat.id, chatId));
+  const db = await getDb();
+  await db.update(chat).set({ updatedAt: /* @__PURE__ */ new Date() }).where(eq(chat.id, chatId));
 }
 async function setChatTitle(chatId, title) {
-  await db().update(chat).set({ title }).where(eq(chat.id, chatId));
+  const db = await getDb();
+  await db.update(chat).set({ title }).where(eq(chat.id, chatId));
 }
 async function appendMessage(chatId, m) {
-  const [created] = await db().insert(message).values({
+  const db = await getDb();
+  const [created] = await db.insert(message).values({
     chatId,
     role: m.role,
     parts: m.parts,
@@ -177,16 +252,19 @@ async function appendMessage(chatId, m) {
   return created;
 }
 async function listMessages(chatId) {
-  return db().select().from(message).where(eq(message.chatId, chatId)).orderBy(message.createdAt);
+  const db = await getDb();
+  return db.select().from(message).where(eq(message.chatId, chatId)).orderBy(message.createdAt);
 }
 async function getMessage(messageId) {
-  const rows = await db().select().from(message).where(eq(message.id, messageId)).limit(1);
+  const db = await getDb();
+  const rows = await db.select().from(message).where(eq(message.id, messageId)).limit(1);
   return rows[0] ?? null;
 }
 async function upsertFeedback(f) {
   const msg = await getMessage(f.messageId);
   if (!msg) throw new Error(`message ${f.messageId} not found`);
-  const [row] = await db().insert(feedback).values({
+  const db = await getDb();
+  const [row] = await db.insert(feedback).values({
     messageId: f.messageId,
     userId: f.userId,
     rating: f.rating,
@@ -206,17 +284,21 @@ async function upsertFeedback(f) {
   return row;
 }
 async function markFeedbackSynced(feedbackId) {
-  await db().update(feedback).set({ syncedAt: /* @__PURE__ */ new Date(), syncError: null }).where(eq(feedback.id, feedbackId));
+  const db = await getDb();
+  await db.update(feedback).set({ syncedAt: /* @__PURE__ */ new Date(), syncError: null }).where(eq(feedback.id, feedbackId));
 }
 async function markFeedbackError(feedbackId, errMsg) {
-  await db().update(feedback).set({ syncError: errMsg.slice(0, 500) }).where(eq(feedback.id, feedbackId));
+  const db = await getDb();
+  await db.update(feedback).set({ syncError: errMsg.slice(0, 500) }).where(eq(feedback.id, feedbackId));
 }
 async function getFeedbackForMessage(messageId, userId) {
-  const rows = await db().select().from(feedback).where(and(eq(feedback.messageId, messageId), eq(feedback.userId, userId))).limit(1);
+  const db = await getDb();
+  const rows = await db.select().from(feedback).where(and(eq(feedback.messageId, messageId), eq(feedback.userId, userId))).limit(1);
   return rows[0] ?? null;
 }
 async function clearFeedback(messageId, userId) {
-  await db().delete(feedback).where(and(eq(feedback.messageId, messageId), eq(feedback.userId, userId)));
+  const db = await getDb();
+  await db.delete(feedback).where(and(eq(feedback.messageId, messageId), eq(feedback.userId, userId)));
 }
 
 // server/src/middleware/auth.ts

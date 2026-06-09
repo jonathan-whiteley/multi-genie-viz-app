@@ -3,26 +3,28 @@ import { getDb } from './connection.js';
 import { user, chat, message, feedback } from './schema.js';
 import type { UIMessagePart, MessageRole, FeedbackRating } from '@multi-genie/core';
 
-const db = () => getDb();
-
 export async function upsertUserByEmail(email: string) {
-  const existing = await db().select().from(user).where(eq(user.email, email)).limit(1);
+  const db = await getDb();
+  const existing = await db.select().from(user).where(eq(user.email, email)).limit(1);
   if (existing[0]) return existing[0];
-  const [created] = await db().insert(user).values({ email }).returning();
+  const [created] = await db.insert(user).values({ email }).returning();
   return created!;
 }
 
 export async function createChat(userId: string, title: string | null = null) {
-  const [created] = await db().insert(chat).values({ userId, title }).returning();
+  const db = await getDb();
+  const [created] = await db.insert(chat).values({ userId, title }).returning();
   return created!;
 }
 
 export async function listChats(userId: string) {
-  return db().select().from(chat).where(eq(chat.userId, userId)).orderBy(desc(chat.updatedAt));
+  const db = await getDb();
+  return db.select().from(chat).where(eq(chat.userId, userId)).orderBy(desc(chat.updatedAt));
 }
 
 export async function getChat(chatId: string, userId: string) {
-  const rows = await db()
+  const db = await getDb();
+  const rows = await db
     .select()
     .from(chat)
     .where(and(eq(chat.id, chatId), eq(chat.userId, userId)))
@@ -31,15 +33,18 @@ export async function getChat(chatId: string, userId: string) {
 }
 
 export async function deleteChat(chatId: string, userId: string) {
-  await db().delete(chat).where(and(eq(chat.id, chatId), eq(chat.userId, userId)));
+  const db = await getDb();
+  await db.delete(chat).where(and(eq(chat.id, chatId), eq(chat.userId, userId)));
 }
 
 export async function touchChat(chatId: string) {
-  await db().update(chat).set({ updatedAt: new Date() }).where(eq(chat.id, chatId));
+  const db = await getDb();
+  await db.update(chat).set({ updatedAt: new Date() }).where(eq(chat.id, chatId));
 }
 
 export async function setChatTitle(chatId: string, title: string) {
-  await db().update(chat).set({ title }).where(eq(chat.id, chatId));
+  const db = await getDb();
+  await db.update(chat).set({ title }).where(eq(chat.id, chatId));
 }
 
 type AppendMessageInput = {
@@ -54,7 +59,8 @@ type AppendMessageInput = {
 };
 
 export async function appendMessage(chatId: string, m: AppendMessageInput) {
-  const [created] = await db()
+  const db = await getDb();
+  const [created] = await db
     .insert(message)
     .values({
       chatId,
@@ -73,7 +79,8 @@ export async function appendMessage(chatId: string, m: AppendMessageInput) {
 }
 
 export async function listMessages(chatId: string) {
-  return db()
+  const db = await getDb();
+  return db
     .select()
     .from(message)
     .where(eq(message.chatId, chatId))
@@ -81,7 +88,8 @@ export async function listMessages(chatId: string) {
 }
 
 export async function getMessage(messageId: string) {
-  const rows = await db().select().from(message).where(eq(message.id, messageId)).limit(1);
+  const db = await getDb();
+  const rows = await db.select().from(message).where(eq(message.id, messageId)).limit(1);
   return rows[0] ?? null;
 }
 
@@ -95,9 +103,8 @@ type UpsertFeedbackInput = {
 export async function upsertFeedback(f: UpsertFeedbackInput) {
   const msg = await getMessage(f.messageId);
   if (!msg) throw new Error(`message ${f.messageId} not found`);
-  // Copy whatever Genie IDs are on the message (may be partial / all null).
-  // The server route gates feedback submission; here we just persist.
-  const [row] = await db()
+  const db = await getDb();
+  const [row] = await db
     .insert(feedback)
     .values({
       messageId: f.messageId,
@@ -122,21 +129,24 @@ export async function upsertFeedback(f: UpsertFeedbackInput) {
 }
 
 export async function markFeedbackSynced(feedbackId: string) {
-  await db()
+  const db = await getDb();
+  await db
     .update(feedback)
     .set({ syncedAt: new Date(), syncError: null })
     .where(eq(feedback.id, feedbackId));
 }
 
 export async function markFeedbackError(feedbackId: string, errMsg: string) {
-  await db()
+  const db = await getDb();
+  await db
     .update(feedback)
     .set({ syncError: errMsg.slice(0, 500) })
     .where(eq(feedback.id, feedbackId));
 }
 
 export async function getFeedbackForMessage(messageId: string, userId: string) {
-  const rows = await db()
+  const db = await getDb();
+  const rows = await db
     .select()
     .from(feedback)
     .where(and(eq(feedback.messageId, messageId), eq(feedback.userId, userId)))
@@ -145,7 +155,8 @@ export async function getFeedbackForMessage(messageId: string, userId: string) {
 }
 
 export async function clearFeedback(messageId: string, userId: string) {
-  await db()
+  const db = await getDb();
+  await db
     .delete(feedback)
     .where(and(eq(feedback.messageId, messageId), eq(feedback.userId, userId)));
 }
