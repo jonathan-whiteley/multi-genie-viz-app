@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { AppConfig, ChatSummary } from '@multi-genie/core';
 import { Layout } from './components/Layout.js';
 import { Header } from './components/Header.js';
-import { EmptyState } from './components/EmptyState.js';
 import { HistorySidebar } from './components/HistorySidebar.js';
 import { SuggestedQuestions } from './components/SuggestedQuestions.js';
 import { ChatPanel } from './components/ChatPanel.js';
@@ -30,6 +29,11 @@ export function App() {
     return c.id;
   };
 
+  const sendFromHome = async (text: string) => {
+    await newChat();
+    setPendingInput(text);
+  };
+
   return (
     <Layout
       header={<Header />}
@@ -38,29 +42,29 @@ export function App() {
           chats={chats}
           activeChatId={activeChatId}
           onSelect={setActiveChatId}
-          onNew={() => void newChat()}
+          onNew={() => {
+            setActiveChatId(null);
+          }}
         />
       }
       main={
-        activeChatId ? (
-          <ChatPanel
-            chatId={activeChatId}
-            spaces={config?.spaces ?? []}
-            pendingInput={pendingInput}
-            onConsumePending={() => setPendingInput('')}
-          />
-        ) : (
-          <EmptyState />
-        )
+        <ChatPanel
+          chatId={activeChatId}
+          spaces={config?.spaces ?? []}
+          pendingInput={pendingInput}
+          onConsumePending={() => setPendingInput('')}
+          onSendFromHome={sendFromHome}
+        />
       }
       rightPanel={
         <SuggestedQuestions
           spaces={config?.spaces ?? []}
           onPick={async (q) => {
             if (!activeChatId) {
-              await newChat();
+              await sendFromHome(q);
+            } else {
+              setPendingInput(q);
             }
-            setPendingInput(q);
           }}
         />
       }

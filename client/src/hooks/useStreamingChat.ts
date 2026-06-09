@@ -27,6 +27,10 @@ export function useStreamingChat(chatId: string) {
   });
 
   const reload = useCallback(async () => {
+    if (!chatId) {
+      setMessages([]);
+      return;
+    }
     setMessages(await fetchMessages(chatId));
   }, [chatId]);
 
