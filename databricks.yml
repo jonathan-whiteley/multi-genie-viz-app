@@ -13,7 +13,7 @@ variables:
     default: "multi_genie_app"
   genie_spaces_json:
     description: "JSON array of Genie space configs (tool_name -> space_id mapping, suggested questions, etc.)"
-    default: '[{"space_id":"01f0aae3f2a812ceb9f489fa0317532a","label":"LCE Sales TXN","tags":["sales","revenue"],"tool_name":"lce-sales-txn-genie","suggested_questions":["What were Q1 revenues?","Show top SKUs this month"]}]'
+    default: '[{"space_id":"01f0aae3f2a812ceb9f489fa0317532a","label":"LCE Sales TXN","tags":["sales","revenue"],"tool_name":"lce-sales-txn-genie","suggested_questions":["What were Q1 revenues?","Show top SKUs this month"]},{"space_id":"01f0fd65f875113b9e1c5ec160aa65bf","label":"Expansion Analytics","tags":["expansion","growth"],"tool_name":"genie-01f0fd65f875113b9e1c5ec160aa65bf","suggested_questions":["Which expansion locations have the highest predicted revenue in Boston?","What are the top candidate sites for new Little Caesars in Massachusetts?"]}]'
 
 sync:
   # Exclude monorepo workspaces that cause npm install to crash.
@@ -41,6 +41,7 @@ resources:
       source_code_path: .
       user_api_scopes:
         - serving.serving-endpoints
+        - model-serving
       resources:
         - name: mas-endpoint
           description: "MAS serving endpoint"

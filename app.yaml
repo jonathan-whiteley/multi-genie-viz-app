@@ -1,6 +1,10 @@
 command: ["npm", "run", "start"]
 runtime: nodejs20
 
+# Forward the user's OBO token to the app via X-Forwarded-Access-Token.
+# Required so the chat route can call the MAS serving endpoint as the signed-in user.
+on_behalf_of_authentication: true
+
 env:
   - name: NODE_ENV
     value: production
@@ -9,7 +13,7 @@ env:
   - name: MAS_ENDPOINT_NAME
     valueFrom: mas-endpoint
   - name: GENIE_SPACES_JSON
-    value: '[{"space_id":"01f0aae3f2a812ceb9f489fa0317532a","label":"LCE Sales TXN","tags":["sales","revenue"],"tool_name":"lce-sales-txn-genie","suggested_questions":["What were Q1 revenues?","Show top SKUs this month"]}]'
+    value: '[{"space_id":"01f0aae3f2a812ceb9f489fa0317532a","label":"LCE Sales TXN","tags":["sales","revenue"],"tool_name":"lce-sales-txn-genie","suggested_questions":["What were Q1 revenues?","Show top SKUs this month"]},{"space_id":"01f0fd65f875113b9e1c5ec160aa65bf","label":"Expansion Analytics","tags":["expansion","growth"],"tool_name":"genie-01f0fd65f875113b9e1c5ec160aa65bf","suggested_questions":["Which expansion locations have the highest predicted revenue in Boston?","What are the top candidate sites for new Little Caesars in Massachusetts?"]}]'
   # DATABRICKS_HOST is auto-injected by the Databricks Apps platform.
   # PGHOST, PGDATABASE, PGUSER, PGPASSWORD, PGSSLMODE are auto-injected
   # by the 'database' resource binding -- no explicit valueFrom needed.

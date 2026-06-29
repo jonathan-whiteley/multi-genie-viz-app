@@ -6,12 +6,15 @@ import { getDatabricksToken, isServicePrincipalAuthAvailable } from '@multi-geni
 let _db: ReturnType<typeof drizzle> | null = null;
 let _client: ReturnType<typeof postgres> | null = null;
 
-async function resolvePassword(): Promise<string> {
+// Resolves the Postgres password on every connection attempt. Lakebase OAuth tokens
+// expire (~1 hour); postgres-js calls this function each time it opens a new connection
+// from the pool, picking up a fresh token automatically. The getDatabricksToken() module
+// caches and refreshes internally so this is cheap.
+async function passwordProvider(): Promise<string> {
   const direct = process.env.PGPASSWORD ?? process.env.LAKEBASE_PASSWORD;
   if (direct) return direct;
   if (isServicePrincipalAuthAvailable()) {
-    const token = await getDatabricksToken();
-    return token;
+    return getDatabricksToken();
   }
   throw new Error(
     'No PGPASSWORD/LAKEBASE_PASSWORD found and DATABRICKS_CLIENT_ID/SECRET not available for OAuth',
@@ -30,7 +33,6 @@ export async function getDb() {
     );
   }
 
-  const password = await resolvePassword();
   const port = Number(process.env.PGPORT ?? '5432');
   const sslmode = (process.env.PGSSLMODE ?? process.env.LAKEBASE_SSL ?? 'require') as
     | 'require'
@@ -42,14 +44,19 @@ export async function getDb() {
     host,
     database,
     user,
-    password,
+    // Pass the function (not a resolved value) so postgres-js calls it each
+    // connection attempt — fresh OAuth token, no stale-token reconnect storms.
+    password: passwordProvider,
     port,
     ssl: sslmode,
     max: 10,
+    // Recycle idle connections more aggressively so we don't hold stale auth.
+    idle_timeout: 60,
+    max_lifetime: 60 * 30,
   });
   _db = drizzle(_client, { schema });
 
-  console.log(`[DB] Connected to ${database} on ${host} (user: ${user})`);
+  console.log(`[DB] Configured pool for ${database} on ${host} (user: ${user})`);
   return _db;
 }
 

@@ -31,16 +31,22 @@ export function ChatPanel(props: {
   onConsumePending: () => void;
   onSendFromHome: (text: string) => Promise<void>;
 }) {
-  const { messages, live, state, send } = useStreamingChat(props.chatId ?? '');
+  const { messages, pendingUserText, live, state, send } = useStreamingChat(props.chatId ?? '');
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  // Guard so each pending question is auto-sent exactly once. Without this, the
+  // effect can fire twice (React StrictMode in dev, or dependency churn from
+  // send/onConsumePending changing identity) and the question gets sent twice.
+  const dispatchedRef = useRef<string>('');
 
   useEffect(() => {
-    if (props.pendingInput && props.chatId) {
-      const q = props.pendingInput;
-      props.onConsumePending();
-      void send(q);
-    }
+    if (!props.pendingInput || !props.chatId) return;
+    const key = `${props.chatId}::${props.pendingInput}`;
+    if (dispatchedRef.current === key) return;
+    dispatchedRef.current = key;
+    const q = props.pendingInput;
+    props.onConsumePending();
+    void send(q);
   }, [props.pendingInput, props.chatId, props.onConsumePending, send]);
 
   useEffect(() => {
@@ -67,15 +73,10 @@ export function ChatPanel(props: {
 
   return (
     <div className="flex h-full flex-col rounded-2xl border border-[color:var(--color-card-border)] bg-[color:var(--color-card)]">
-      <div className="flex items-center justify-between border-b border-[color:var(--color-card-border)] px-4 py-3 text-sm font-semibold">
+      <div className="flex items-center border-b border-[color:var(--color-card-border)] px-4 py-3 text-sm font-semibold">
         <span className="inline-flex items-center gap-2">
           <Sparkles size={14} className="text-[color:var(--color-accent)]" /> Ask Genie
         </span>
-        {state.phase === 'thinking' && <ThinkingDots />}
-        {state.phase === 'tool-call' && <ToolCallIndicator label={state.label} />}
-        {state.phase === 'streaming' && live?.toolLabel && (
-          <ToolCallIndicator label={live.toolLabel} complete />
-        )}
       </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {isHome && messages.length === 0 && !isLoading && (
@@ -94,6 +95,13 @@ export function ChatPanel(props: {
             spaceLabel={resolveLabel(props.spaces, m.genieSpaceId, m.toolName)}
           />
         ))}
+        {pendingUserText && (
+          <div className="flex justify-end">
+            <div className="max-w-[60%] rounded-2xl bg-[color:var(--color-ink)] px-4 py-2 text-sm text-white">
+              {pendingUserText}
+            </div>
+          </div>
+        )}
         {state.phase === 'thinking' && (
           <div className="flex items-center gap-2 rounded-2xl border border-[color:var(--color-card-border)] bg-[color:var(--color-card)] p-4">
             <Sparkles size={14} className="animate-pulse text-[color:var(--color-accent)]" />

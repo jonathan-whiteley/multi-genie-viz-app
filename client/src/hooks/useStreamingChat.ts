@@ -17,6 +17,7 @@ export type LiveAssistant = {
 
 export function useStreamingChat(chatId: string) {
   const [messages, setMessages] = useState<StoredMessage[]>([]);
+  const [pendingUserText, setPendingUserText] = useState<string | null>(null);
   const [live, setLive] = useState<LiveAssistant | null>(null);
   const [state, setState] = useState<StreamState>({ phase: 'idle' });
   const liveRef = useRef<LiveAssistant>({
@@ -43,6 +44,7 @@ export function useStreamingChat(chatId: string) {
       setState({ phase: 'thinking' });
       liveRef.current = { text: '', toolName: null, toolLabel: null, genieMeta: null };
       setLive({ ...liveRef.current });
+      setPendingUserText(text);
 
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -53,10 +55,11 @@ export function useStreamingChat(chatId: string) {
       if (!res.ok || !res.body) {
         setState({ phase: 'idle' });
         setLive(null);
+        setPendingUserText(null);
+        await reload();
         return;
       }
 
-      // Optimistically show the user message (server already persisted it; reload at end syncs)
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
@@ -82,6 +85,7 @@ export function useStreamingChat(chatId: string) {
 
       setState({ phase: 'idle' });
       setLive(null);
+      setPendingUserText(null);
       await reload();
 
       function handleEvent(ev: { type: string; [k: string]: unknown }) {
@@ -108,7 +112,6 @@ export function useStreamingChat(chatId: string) {
           if (meta?.space_label) liveRef.current.toolLabel = meta.space_label;
           setLive({ ...liveRef.current });
         } else if (ev.type === 'error') {
-          // Surface error in the live text and clean up
           liveRef.current.text += `\n\n[error: ${ev.message}]`;
           setLive({ ...liveRef.current });
         } else if (ev.type === 'finish') {
@@ -119,5 +122,5 @@ export function useStreamingChat(chatId: string) {
     [chatId, reload],
   );
 
-  return { messages, live, state, send };
+  return { messages, pendingUserText, live, state, send };
 }

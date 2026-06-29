@@ -80,11 +80,22 @@ chatRouter.post('/api/chat', async (req, res) => {
   let toolResultText: string | null = null;
   let genieMeta: ReturnType<typeof extractGenieMeta> = null;
 
-  const host = process.env.DATABRICKS_HOST!;
-  const endpoint = process.env.MAS_ENDPOINT_NAME!;
-  const url = `${host.replace(/\/$/, '')}/serving-endpoints/${endpoint}/invocations`;
+  const host = process.env.DATABRICKS_HOST;
+  const endpoint = process.env.MAS_ENDPOINT_NAME;
+  console.log(
+    `[chat] pre-fetch: host=${host ? 'set' : 'MISSING'} endpoint=${endpoint ?? 'MISSING'} ` +
+      `hasToken=${!!req.session?.accessToken} historyLen=${inputMessages.length}`,
+  );
+  if (!host || !endpoint) {
+    send({ type: 'error', message: `server misconfigured: DATABRICKS_HOST=${!!host} MAS_ENDPOINT_NAME=${!!endpoint}` });
+    res.end();
+    return;
+  }
+  const normalizedHost = host.startsWith('http') ? host : `https://${host}`;
+  const url = `${normalizedHost.replace(/\/$/, '')}/serving-endpoints/${endpoint}/invocations`;
 
   try {
+    console.log(`[chat] fetching ${url}`);
     const upstream = await fetch(url, {
       method: 'POST',
       headers: {
@@ -95,8 +106,13 @@ chatRouter.post('/api/chat', async (req, res) => {
       body: JSON.stringify({ input: inputMessages, stream: true }),
     });
 
+    console.log(
+      `[chat] MAS response: status=${upstream.status} hasBody=${!!upstream.body}`,
+    );
+
     if (!upstream.ok || !upstream.body) {
       const errText = await upstream.text().catch(() => '');
+      console.error(`[chat] MAS error ${upstream.status}: ${errText.slice(0, 300)}`);
       send({ type: 'error', message: `MAS endpoint ${upstream.status}: ${errText.slice(0, 500)}` });
       res.end();
       return;
@@ -209,6 +225,7 @@ chatRouter.post('/api/chat', async (req, res) => {
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (err) {
+    console.error(`[chat] caught error:`, err);
     send({ type: 'error', message: (err as Error).message });
     res.end();
   }
