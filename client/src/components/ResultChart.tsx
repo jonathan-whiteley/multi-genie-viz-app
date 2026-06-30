@@ -57,6 +57,42 @@ const formatTick = (v: number, currency: boolean) => {
   return currency ? `$${s}` : s;
 };
 
+// Infer the spacing of a date/time label column so ticks can be formatted at the
+// right resolution. Works for ISO dates, "YYYY-MM", and bare years (repeated bare
+// years collapse to yearly via the median non-zero day-gap).
+type DateGranularity = 'day' | 'month' | 'year' | 'none';
+const dateGranularity = (labels: string[]): DateGranularity => {
+  const times = labels
+    .map((l) => new Date(l).getTime())
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  if (times.length < 2) return times.length === 1 ? 'day' : 'none';
+  const gaps: number[] = [];
+  for (let i = 1; i < times.length; i++) {
+    const days = (times[i]! - times[i - 1]!) / 86_400_000;
+    if (days > 0) gaps.push(days);
+  }
+  if (gaps.length === 0) return 'none';
+  gaps.sort((a, b) => a - b);
+  const median = gaps[Math.floor(gaps.length / 2)]!;
+  if (median <= 2) return 'day';
+  if (median <= 45) return 'month';
+  return 'year';
+};
+
+// Format one date tick at the detected granularity (UTC, so "2023-01-01" doesn't
+// slip to Dec 31 in negative-offset zones). Falls back to the raw value.
+const formatDateTick = (value: string, gran: DateGranularity): string => {
+  if (gran === 'none') return value;
+  const d = new Date(value);
+  if (!Number.isFinite(d.getTime())) return value;
+  const year = d.getUTCFullYear();
+  if (gran === 'year') return String(year);
+  const mon = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+  if (gran === 'month') return `${mon} '${String(year).slice(2)}`;
+  return `${mon} ${d.getUTCDate()}`;
+};
+
 // Drop columns that look like row-index junk: empty header AND every value is a
 // sequential integer (Genie tool-results include a "" header column of row indices).
 const dropIndexColumns = ({ columns, rows }: TableData): TableData => {
@@ -114,6 +150,9 @@ export function ResultChart(props: {
   const valueLabel = humanizeColumn(valueCol);
   const tickFmt = (v: number) => formatTick(v, currency);
   const tooltipFmt = (v: number): [string, string] => [formatValue(Number(v), currency), valueLabel];
+  // Granularity-aware date ticks for the line chart's x-axis.
+  const gran = isLine ? dateGranularity(chartData.map((d) => String(d[labelCol]))) : 'none';
+  const dateTickFmt = (v: unknown) => formatDateTick(String(v), gran);
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -133,9 +172,14 @@ export function ResultChart(props: {
         {isLine ? (
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-            <XAxis dataKey={labelCol} />
+            <XAxis
+              dataKey={labelCol}
+              tickFormatter={dateTickFmt}
+              interval="preserveStartEnd"
+              minTickGap={48}
+            />
             <YAxis tickFormatter={tickFmt} width={72} />
-            <Tooltip formatter={tooltipFmt} />
+            <Tooltip formatter={tooltipFmt} labelFormatter={dateTickFmt} />
             <Line type="monotone" dataKey={valueCol} stroke={accent} strokeWidth={2} dot={false} />
           </LineChart>
         ) : (

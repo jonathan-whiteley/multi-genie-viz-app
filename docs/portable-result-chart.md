@@ -141,6 +141,7 @@ All logic lives in small pure functions at the top of the file:
 | Pick the category axis | inline | first column that is *mostly non-numeric* |
 | Pick the value axis | inline | last column that is *mostly numeric* |
 | Line vs. bar | `isTimeColumn` | label column matching `date\|time\|month\|day\|year\|week` → line; else horizontal bars |
+| Date axis ticks | `dateGranularity` + `formatDateTick` | infer day/month/year from the median gap between points; render `Jan 2` / `Jan '23` / `2023`, and thin crowded ticks via `interval="preserveStartEnd"` + `minTickGap` |
 | `$` prefix | `isCurrencyColumn` | value column matching `usd\|revenue\|price\|cost\|amount\|…` |
 | Axis ticks | `formatTick` | thousands separators + compact `K`/`M`/`B` |
 | Tooltip / title | `formatValue`, `humanizeColumn` | full commas + `$`; `gross_revenue_usd` → `Gross Revenue Usd` |

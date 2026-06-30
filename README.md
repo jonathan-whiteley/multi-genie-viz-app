@@ -10,6 +10,15 @@ A Databricks App that fronts a Multi-Agent Supervisor (MAS) serving endpoint wit
 - **Streaming:** raw fetch + SSE parsing of Databricks Responses API chunks
 - **Deployment:** Databricks Asset Bundles + Databricks Apps with On-Behalf-Of (OBO) auth
 
+## Charting Genie results (portable)
+
+The chart that renders tabular Genie answers is intentionally self-contained
+(only `react` + `recharts`) so you can lift it into your own React + FastAPI (or
+any) app fronting a multi-Genie MAS endpoint.
+
+- **Component:** [`client/src/components/ResultChart.tsx`](client/src/components/ResultChart.tsx) — takes a single `{ columns, rows }` prop; auto-picks label/value columns, line vs. bar, `$`/`K`/`M` and granularity-aware date ticks.
+- **Guide:** [`docs/portable-result-chart.md`](docs/portable-result-chart.md) — the data contract, the MAS → parse → render flow, markdown-table parsing in **TypeScript and Python/FastAPI**, the heuristics, and theming.
+
 ## Prerequisites
 
 - A Databricks workspace with the Apps feature enabled
